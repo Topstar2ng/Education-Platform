@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profile - Education Platform</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    
+</head>
+<body>
+    <!-- Header -->
+    <div class="header">
+        <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Logo" class="logo">
+        <h1>Education Platform</h1>
+    </div>
+
+    <!-- Navigation Menu -->
+    <div class="navbar">
+        <a href="{{ url_for('student_dashboard') }}">Dashboard</a>
+        <a href="{{ url_for('student_courses') }}">My Courses</a>
+        <a href="{{ url_for('student_submissions') }}">Submissions</a>
+        <a href="{{ url_for('student_profile') }}" class="active">Profile</a>
+        <a href="{{ url_for('logout') }}" class="logout">Logout</a>
+    </div>
+
+    <!-- Main Content -->
+    <div class="container">
+        <h2>Profile</h2>
+        <p>Update your profile information.</p>
+
+        <!-- Display Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="message {{ category }}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+
+        <!-- Profile Form -->
+        <div class="profile-form">
+            <h3>Profile Information</h3>
+            <form action="{{ url_for('student_profile') }}" method="POST">
+                <div class="form-group">
+                    <label for="username">Username:</label>
+                    <input type="text" id="username" name="username" value="{{ current_user.username }}" required>
+                </div>
+                <div class="form-group">
+                    <label for="email">Email:</label>
+                    <input type="email" id="email" name="email" value="{{ current_user.email }}" required>
+                </div>
+                <button type="submit" class="btn btn-primary">Update Profile</button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

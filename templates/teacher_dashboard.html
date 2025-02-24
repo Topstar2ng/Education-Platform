@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teachers Dashboard - Education Platform</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome CDN Link -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="apple-touch-icon" sizes="180x180"  href="{{ url_for('static', filename='images/apple-touch-icon.png') }}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='images/favicon-32x32.png') }}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='images/favicon-16x16.png') }}">
+    <link rel="manifest" href="{{ url_for('static', filename='images/site.webmanifest') }}">
+</head>
+<body>
+    <!-- Navigation Menu -->
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container-fluid">
+            <!-- Logo and Brand Name -->
+            <a class="navbar-brand" href="#">
+                <img src="{{ url_for('static', filename='images/favicon-32x32.png') }}" alt="Logo">
+                
+            </a>
+
+            <!-- Toggle Button for Mobile -->
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <!-- Navbar Links -->
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a href="{{ url_for('teacher_dashboard') }}" class="nav-link active">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="{{ url_for('teacher_manage_courses') }}" class="nav-link">Nanage Courses</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="{{ url_for('teacher_manage_students') }}" class="nav-link">Manage Students</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="{{ url_for('upload_assignment') }}" class="nav-link">Upload Assignments</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="{{ url_for('view_submissions') }}" class="nav-link">View Submissions</a>
+                    </li>
+                </ul>
+
+                <!-- User Dropdown -->
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-user"></i> {{ current_user.username }}
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarDropdown">
+                            <li><a class="dropdown-item" href="{{ url_for('teacher_profile') }}">Profile</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item logout" href="{{ url_for('logout') }}">Logout</a></li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+
+    <!-- Main Content -->
+    <div class="container">
+        <h2>Welcome, Teacher!</h2>
+        <p>You have access to manage your courses, view student submissions, and interact with your students.</p>
+        <h2>QUICK STATS</h2>
+        <div class="row">
+            <div class="col-12 col-sm-12 col-md-6 col-lg-4">
+                <div class="card">
+                    <div class="card-header">My Courses</div>
+                    <div class="card-body">
+                        {{ total_courses }}
+                    </div>
+                    <div class="card-footer"><a href="{{ url_for('teacher_manage_courses') }}">Manage Courses</a></div>
+                </div>
+            </div>
+            <div class="col-12 col-sm-12 col-md-6 col-lg-4">
+                <div class="card">
+                    <div class="card-header">Pending Submissions</div>
+                    <div class="card-body">
+                        {{ pending_submissions }}
+                    </div>
+                    <div class="card-footer"><a href="{{ url_for('view_submissions') }}">Manage Courses</a></div>
+                </div>
+            </div>
+            <div class="col-12 col-sm-12 col-md-6 col-lg-4">
+                <div class="card">
+                    <div class="card-header">Students Enrolled</div>
+                    <div class="card-body">
+                        {{ total_students }}
+                    </div>
+                    <div class="card-footer"><a href="{{ url_for('teacher_manage_students') }}">Manage Students</a></div>
+                </div>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-12 col-sm-12 col-md-12 col-lg-12">
+                <div class="card">
+                    <div class="card-header">Recent Activities</div>
+                    <div class="card-body recent-activity">
+                        <ul>
+                            {% if recent_activities %}
+                                {% for activity in recent_activities %}
+                                    <li>
+                                        <span>{{ activity[0] }}</span> - {{ activity[1] }}
+                                    </li>
+                                {% endfor %}
+                            {% else %}
+                                <li>No recent activities.</li>
+                            {% endif %}
+                        </ul>
+                    </div>
+                    <div class="card-footer"><a href="#">recent activities</a></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Links -->
+        <div class="quick-links">
+            <a href="{{ url_for('teacher_manage_courses') }}" class="btn">Manage Courses</a>
+            <a href="{{ url_for('view_submissions') }}" class="btn">View Submissions</a>
+            <a href="{{ url_for('teacher_manage_students') }}" class="btn">Manage Students</a>
+        </div>
+    </div>
+<!-- Bootstrap JS and dependencies -->
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.min.js"></script>
+</body>
+</html>

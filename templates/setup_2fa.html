@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Setup 2FA - Education Platform</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="header">
+        <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Logo" class="logo">
+        <h1>Education Platform</h1>
+    </div>
+    <div class="container">
+        <h2>Setup Two-Factor Authentication (2FA)</h2>
+        <p>To complete your registration, set up 2FA using the information below:</p>
+
+        <h3>Step 1: Scan the QR Code</h3>
+        <p>Open your authenticator app (e.g., Google Authenticator) and scan the QR code below:</p>
+        <img src="data:image/png;base64,{{ qr_code_img }}" alt="QR Code">
+
+        <h3>Step 2: Or Enter the Secret Key Manually</h3>
+        <p>If you cannot scan the QR code, enter the following secret key manually:</p>
+        <div class="secret-key">
+            <strong>{{ secret_key }}</strong>
+        </div>
+
+        <h3>Step 3: Verify 2FA</h3>
+        <p>After setting up 2FA, <a href="{{ url_for('login') }}">log in</a> and enter the OTP from your authenticator app.</p>
+    </div>
+</body>
+</html>

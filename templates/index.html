@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Education Platform</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <!-- Navigation Menu -->
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container-fluid">
+            <!-- Logo and Brand Name -->
+            <a class="navbar-brand" href="#">
+                <img src="{{ url_for('static', filename='images/favicon-32x32.png') }}" alt="Logo">
+                Secured School Manager
+            </a>
+
+            <!-- Toggle Button for Mobile -->
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <!-- Navbar Links -->
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="#">Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('login') }}">Login</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('register') }}">Register</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('reset_password') }}">Forgot Password</a>
+                    </li>
+                </ul>
+
+                
+            </div>
+        </div>
+    </nav>
+    <div class="container">
+        <div class="row">
+            <div class="col-12 col-sm-12 col-md-2 col-lg-3">&nbsp;</div>
+            <div class="col-12 col-sm-12 col-md-8 col-lg-6" style="text-align: center;">
+                <h2>Welcome to Our Secured School Manager</h2>
+                <p>Manage student data securely and efficiently.</p>
+                <div class="row">
+                    <div class="col-sm-12 col-md-6 mb-2 p-2">
+                        <a href="{{ url_for('login') }}" class="btn btn-success form-control">Login</a>
+                    </div>
+                    <div class="col-sm-12 col-md-6 mb-2 p-2">
+                        <a href="{{ url_for('register') }}" class="btn btn-primary form-control">Register</a>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-sm-12 col-md-2 col-lg-3">&nbsp;</div>
+        </div>
+        
+
+    </div>
+</body>
+</html>

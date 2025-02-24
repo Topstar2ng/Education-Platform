@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teacher Profile - Education Platform</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    
+</head>
+<body>
+    <!-- Header -->
+    <div class="header">
+        <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Logo" class="logo">
+        <h1>Education Platform</h1>
+    </div>
+
+    <!-- Navigation Menu -->
+    <div class="navbar">
+        <a href="{{ url_for('teacher_dashboard') }}">Dashboard</a>
+        <a href="{{ url_for('teacher_manage_courses') }}">Manage Courses</a>
+        <a href="{{ url_for('teacher_manage_students') }}">Manage Students</a>
+        <a href="{{ url_for('upload_assignment') }}">Upload Assignment</a>
+        <a href="{{ url_for('view_submissions') }}">View Submissions</a>        
+        <a href="{{ url_for('teacher_profile') }}" class="active">Profile</a>
+        <a href="{{ url_for('logout') }}" class="logout">Logout</a>
+    </div>
+    
+
+    <!-- Main Content -->
+    <div class="container">
+        <h2>Teacher Profile</h2>
+        <p>Update your profile information and manage your account settings.</p>
+
+        <!-- Display Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="message {{ category }}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <!-- Profile Information Section -->
+        <div class="profile-section">
+            <h3>Profile Information</h3>
+            <form action="{{ url_for('teacher_profile') }}" method="POST">
+                <div class="form-group">
+                    <label for="username">Username:</label>
+                    <input type="text" id="username" name="username" value="{{ current_user.username }}" required>
+                </div>
+                <div class="form-group">
+                    <label for="email">Email:</label>
+                    <input type="email" id="email" name="email" value="{{ current_user.email }}" required>
+                </div>
+                <button type="submit" class="btn btn-primary">Update Profile</button>
+            </form>
+        </div>
+
+        <!-- Change Password Section -->
+        <div class="profile-section">
+            <h3>Change Password</h3>
+            <form action="{{ url_for('teacher_change_password') }}" method="POST">
+                <div class="form-group">
+                    <label for="current_password">Current Password:</label>
+                    <input type="password" id="current_password" name="current_password" required>
+                </div>
+                <div class="form-group">
+                    <label for="new_password">New Password:</label>
+                    <input type="password" id="new_password" name="new_password" required>
+                </div>
+                <div class="form-group">
+                    <label for="confirm_password">Confirm New Password:</label>
+                    <input type="password" id="confirm_password" name="confirm_password" required>
+                </div>
+                <button type="submit" class="btn btn-primary">Change Password</button>
+            </form>
+        </div>
+
+        <!-- Two-Factor Authentication Section -->
+        <div class="profile-section">
+            <h3>Two-Factor Authentication (2FA)</h3>
+            {% if current_user.secret_key %}
+                <p>2FA is currently <strong>enabled</strong>.</p>
+                <a href="{{ url_for('disable_2fa') }}" class="btn btn-danger">Disable 2FA</a>
+            {% else %}
+                <p>2FA is currently <strong>disabled</strong>.</p>
+                <a href="{{ url_for('enable_2fa') }}" class="btn btn-primary">Enable 2FA</a>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>

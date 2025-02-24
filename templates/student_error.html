@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Error - Student</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .error-container {
+            text-align: center;
+            padding: 50px;
+        }
+        .error-container h1 {
+            font-size: 48px;
+            color: #dc3545;
+        }
+        .error-container p {
+            font-size: 18px;
+            color: #555;
+        }
+        .btn {
+            padding: 10px 20px;
+            border-radius: 5px;
+            text-decoration: none;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+        }
+        .btn-primary {
+            background: #007bff;
+            color: #fff;
+        }
+        .btn-primary:hover {
+            background: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <h1>Oops!</h1>
+        <p>Something went wrong. The page you are looking for does not exist or you do not have permission to access it.</p>
+        <p>Please contact your teacher or administrator if you believe this is an error.</p>
+        <a href="{{ url_for('student_dashboard') }}" class="btn btn-primary">Go to Student Dashboard</a>
+    </div>
+</body>
+</html>

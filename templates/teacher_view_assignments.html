@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>View Assignments - Education Platform</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    
+</head>
+<body>
+    <!-- Header -->
+    <div class="header">
+        <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Logo" class="logo">
+        <h1>Education Platform</h1>
+    </div>
+
+     <!-- Navigation Menu -->
+     <div class="navbar">
+        <a href="{{ url_for('teacher_dashboard') }}">Dashboard</a>
+        <a href="{{ url_for('teacher_manage_courses') }}">Manage Courses</a>
+        <a href="{{ url_for('teacher_manage_students') }}">Manage Students</a>
+        <a href="{{ url_for('upload_assignment') }}">Upload Assignment</a>
+        <a href="{{ url_for('view_assignments') }}" class="active">Active Assignments</a>
+        <a href="{{ url_for('view_submissions') }}">View Submissions</a>        
+        <a href="{{ url_for('teacher_profile') }}">Profile</a>
+        <a href="{{ url_for('logout') }}" class="logout">Logout</a>
+    </div>
+
+    <!-- Main Content -->
+    <div class="container">
+        <h2>View Assignments</h2>
+        <p>View all uploaded assignments for your courses.</p>
+
+        <!-- Assignments Table -->
+        <table class="assignment-table">
+            <thead>
+                <tr>
+                    <th>Course</th>
+                    <th>Title</th>
+                    <th>Description</th>
+                    <th>Due Date</th>
+                    <th>File</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if assignments %}
+                    {% for assignment in assignments %}
+                        <tr>
+                            <td>{{ assignment[1] }}</td> <!-- Course Title -->
+                            <td>{{ assignment[2] }}</td> <!-- Assignment Title -->
+                            <td>{{ assignment[3] }}</td> <!-- Description -->
+                            <td>{{ assignment[4] }}</td> <!-- Due Date -->
+                            <td>
+                                <a href="{{ url_for('download_assignment', file_path=assignment[5]) }}" class="btn btn-primary">Download</a>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="5">No assignments found.</td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

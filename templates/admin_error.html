@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Error - Admin</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    
+</head>
+<body>
+    <div class="error-container">
+        <h1>Oops!</h1>
+        <p>Something went wrong. The page you are looking for does not exist or you do not have permission to access it.</p>
+        <p>Please contact the system administrator if you believe this is an error.</p>
+        <a href="{{ url_for('admin_dashboard') }}" class="btn btn-primary">Go to Admin Dashboard</a>
+    </div>
+</body>
+</html>

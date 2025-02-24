@@ -1,0 +1,474 @@
+/* Global Styles */
+body {
+    font-family: Arial, sans-serif;
+    background-color: lavender;
+    margin: 0;
+    padding: 0;
+}
+
+.header {
+    background-color: #4CAF50;
+    color: white;
+    padding: 10px;
+    display: flex;
+    align-items: center;
+    color: #ccc;
+}
+
+.header .logo {
+    height: 50px;
+    margin-right: 15px;
+}
+
+/* Navigation Menu */
+.navbar-brand img {
+    height: 40px; /* Adjust logo height */
+    margin-right: 10px;
+}
+.navbar {
+    background-color: #007bff; /* Navbar background color */
+}
+.navbar-nav .nav-link {
+    color: white !important; /* Navbar link color */
+    height: 100%;
+}
+.nav-item .nav-link.active {
+    font-weight: bold; /* Make the active link bold */
+    background-color: #0056b3; /* Change background color for active link */
+    border-radius: 5px; /* Add rounded corners */
+    padding: 8px 12px; /* Adjust padding for better appearance */
+}
+
+.navbar-nav .nav-link:hover {
+    color: #f8f9fa !important; /* Navbar link hover color */
+    border-bottom: 1px solid #0056b3;
+}
+.dropdown-menu {
+    background-color: #007bff; /* Dropdown background color */
+}
+.dropdown-item {
+    color: white !important; /* Dropdown item color */
+}
+.dropdown-item:hover {
+    background-color: #0056b3; /* Dropdown item hover background */
+}
+
+.navbar-nav .logout {
+    float: right;
+    background-color: #f44336;
+}
+
+.navbar .logout:hover {
+    background-color: #d32f2f;
+}
+
+/* Main Content */
+
+h1, h2 {
+    color: #333;
+}
+
+
+.btn:hover {
+    background-color: #45a049;
+}
+
+form{
+    padding: 10px;
+    background-color: white;
+    opacity: 0.7;
+    border-radius: 10px;
+    box-shadow: 0px 0px 1px #000;
+}
+
+form[style*="display: inline"] {
+    padding: 1px;
+    background-color: transparent;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+
+.error {
+    color: red;
+    margin-bottom: 15px;
+}
+
+/* Table Styles */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+}
+
+table th, table td {
+    padding: 12px;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+}
+
+table th {
+    background-color: #4CAF50;
+    color: white;
+}
+
+table tr:hover {
+    background-color: #f5f5f5;
+}
+
+
+.btn-danger {
+    background-color: #f44336;
+    color: white;
+}
+
+.btn-danger:hover {
+    background-color: #d32f2f;
+}
+
+textarea {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    min-height: 100px;
+}
+
+/* Button Styles */
+
+
+/*status*/
+/* Status Labels */
+.status-active {
+    color: green;
+    font-weight: bold;
+}
+
+.status-inactive {
+    color: red;
+    font-weight: bold;
+}
+
+
+/* Additional CSS for new features */
+.quick-stats {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 20px;
+}
+
+.card-header {
+    margin: 0 0 10px;
+    font-size: 18px;
+    color: #333;
+    font-weight: bolder;
+}
+.card-body {
+    margin: 0;
+    font-size: 24px;
+    font-weight: bold;
+    color: #007bff;
+    text-align: center;
+}
+.card-footer {
+    margin: 0 0 10px;
+    font-size: 12px;
+    color: #0056b3;
+    font-style: italic;
+}
+.recent-activity ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+.activity-list li {
+    padding: 10px 0;
+    border-bottom: 1px solid #eee;
+}
+.activity-list li:last-child {
+    border-bottom: none;
+}
+.activity-list li span {
+    font-weight: bold;
+    color: #007bff;
+}
+
+/* Additional CSS for the Manage Students page */
+
+.student-list {
+    margin-top: 20px;
+}
+.student-card {
+    background: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+.student-info {
+    flex: 1;
+}
+.student-info h3 {
+    margin: 0 0 5px;
+    font-size: 18px;
+    color: #333;
+}
+.student-info p {
+    margin: 0;
+    font-size: 14px;
+    color: #666;
+}
+.student-actions {
+    display: flex;
+    gap: 10px;
+}
+        
+/*additional css for teacher profile*/
+.profile-section {
+    background: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+.profile-section h3 {
+    margin: 0 0 15px;
+    font-size: 20px;
+    color: #333;
+}
+
+
+.message {
+    padding: 10px;
+    border-radius: 5px;
+    margin-bottom: 15px;
+}
+.message.success {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+.message.error {
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+/* Additional CSS for the Manage Courses page */
+        
+.course-list {
+    margin-top: 20px;
+}
+.course-card {
+    background: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+.course-info {
+    flex: 1;
+}
+.course-info h3 {
+    margin: 0 0 5px;
+    font-size: 18px;
+    color: #333;
+}
+.course-info p {
+    margin: 0;
+    font-size: 14px;
+    color: #666;
+}
+.course-actions {
+    display: flex;
+    gap: 10px;
+}
+
+
+.btn-primary {
+    background: #007bff;
+    color: #fff;
+}
+.btn-primary:hover {
+    background: #0056b3;
+}
+.btn-secondary {
+    background: #6c757d;
+    color: #fff;
+}
+.btn-secondary:hover {
+    background: #5a6268;
+}
+
+.add-course-form {
+    margin-top: 20px;
+    background: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+.add-course-form h3 {
+    margin: 0 0 15px;
+    font-size: 20px;
+    color: #333;
+}
+
+.course-select {
+    margin-bottom: 20px;
+}
+.course-select label {
+    font-weight: bold;
+    margin-right: 10px;
+}
+.course-select select {
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    font-size: 14px;
+}
+.student-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+}
+.student-table th,
+.student-table td {
+    padding: 10px;
+    border: 1px solid #ddd;
+    text-align: left;
+}
+.student-table th {
+    background: #f9f9f9;
+    font-weight: bold;
+}
+.student-table tr:hover {
+    background: #f1f1f1;
+}
+
+/* view submission page*/
+.submission-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+}
+.submission-table th,
+.submission-table td {
+    padding: 10px;
+    border: 1px solid #ddd;
+    text-align: left;
+}
+.submission-table th {
+    background: #f9f9f9;
+    font-weight: bold;
+    color: #333;
+}
+.submission-table tr:hover {
+    background: #f1f1f1;
+}
+
+.grade-form {
+    display: inline-block;
+}
+.grade-form input[type="number"] {
+    width: 60px;
+    padding: 5px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+}
+
+/*Students portal*/
+.recent-grades {
+    margin-top: 20px;
+}
+.recent-grades h3 {
+    margin: 0 0 15px;
+    font-size: 20px;
+    color: #333;
+}
+.grade-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+.grade-list li {
+    padding: 10px;
+    border-bottom: 1px solid #eee;
+}
+.grade-list li:last-child {
+    border-bottom: none;
+}
+.grade-list li span {
+    font-weight: bold;
+    color: #007bff;
+}
+
+.upload-form {
+    background: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 20px;
+    margin-top: 20px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+.upload-form h3 {
+    margin: 0 0 15px;
+    font-size: 20px;
+    color: #333;
+}
+.assignment-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+}
+.assignment-table th,
+.assignment-table td {
+    padding: 10px;
+    border: 1px solid #ddd;
+    text-align: left;
+}
+.assignment-table th {
+    background: #f9f9f9;
+    font-weight: bold;
+}
+.assignment-table tr:hover {
+    background: #f1f1f1;
+}
+.profile-form {
+    background: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 20px;
+    margin-top: 20px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+.profile-form h3 {
+    margin: 0 0 15px;
+    font-size: 20px;
+    color: #333;
+}
+.error-container {
+    text-align: center;
+    padding: 50px;
+}
+.error-container h1 {
+    font-size: 48px;
+    color: #dc3545;
+}
+.error-container p {
+    font-size: 18px;
+    color: #555;
+}
