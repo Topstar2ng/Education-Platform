@@ -1,36 +1,52 @@
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash  # type: ignore # Add flash here
-from flask_mysqldb import MySQL # type: ignore
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash
 import os
-import bcrypt # type: ignore
-import pyotp # type: ignore
-import qrcode # type: ignore
+import bcrypt  # type: ignore
+import pyotp  # type: ignore
+import qrcode  # type: ignore
 from io import BytesIO
 import base64
-from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required # type: ignore
-from flask_login import current_user # type: ignore
-from flask import render_template # type: ignore
-from flask import send_from_directory # type: ignore
+from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+from flask import send_from_directory, abort
+import pymysql
+pymysql.install_as_MySQLdb()
 
 app = Flask(__name__)
-app.secret_key = 'your_secret_key_here'  # Change this to a secure key
+app.secret_key = 'your_secret_key_here'  # strong secret key
 
-# MySQL Configuration
-app.config['MYSQL_HOST'] = 'localhost'
-app.config['MYSQL_USER'] = 'root'
-app.config['MYSQL_PASSWORD'] = ''
-app.config['MYSQL_DB'] = 'education_platform'
-mysql = MySQL(app)
-
+# MySQL Configuration (Using PyMySQL)
 """
 app.config['MYSQL_HOST'] = 'localhost'
 app.config['MYSQL_USER'] = 'tecsfrzo'
 app.config['MYSQL_PASSWORD'] = 'yGtpiZDW2aQi'
 app.config['MYSQL_DB'] = 'tecsfrzo_education_platform'
-mysql = MySQL(app)
 """
+app.config['MYSQL_HOST'] = 'localhost'
+app.config['MYSQL_USER'] = 'root'
+app.config['MYSQL_PASSWORD'] = ''
+app.config['MYSQL_DB'] = 'education_platform'
+
+# Initialize MySQL connection
+connection = pymysql.connect(
+    host=app.config['MYSQL_HOST'],
+    user=app.config['MYSQL_USER'],
+    password=app.config['MYSQL_PASSWORD'],
+    database=app.config['MYSQL_DB'],
+)
+
 # Flask-Login Setup
 login_manager = LoginManager()
 login_manager.init_app(app)
+
+# Flask-Login User Loader
+@login_manager.user_loader
+def load_user(user_id):
+    # You will need to replace this with your actual user lookup logic
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT id, username, role FROM users WHERE id = %s", (user_id,))
+        result = cursor.fetchone()
+        if result:
+            return User(user_id=result[0], username=result[1], role=result[2])
+    return None
 
 # User Class for Flask-Login
 class User(UserMixin):
@@ -39,15 +55,20 @@ class User(UserMixin):
         self.username = username
         self.role = role
 
+
 @login_manager.user_loader
 def load_user(user_id):
-    cur = mysql.connection.cursor()
-    cur.execute("SELECT user_id, username, role FROM users WHERE user_id = %s", (user_id,))
-    user = cur.fetchone()
-    cur.close()
-    if user:
-        return User(user[0], user[1], user[2])
-    return None
+    try:
+        with connection.cursor() as cur:
+            cur.execute("SELECT user_id, username, role FROM users WHERE user_id = %s", (user_id,))
+            user = cur.fetchone()
+        if user:
+            return User(user[0], user[1], user[2])
+        return None
+    except Exception as e:
+        print(f"Error loading user: {str(e)}")
+        return None
+
 
 # Helper Functions
 def generate_secret_key():
@@ -83,13 +104,21 @@ def generate_qr_code(totp_uri):
     return img_str
 
 def verify_otp(secret_key, otp):
+    """
+    Verify the OTP (One-Time Password) using the secret key.
+    :param secret_key: The user's secret key.
+    :param otp: The OTP entered by the user.
+    :return: True if the OTP is valid, otherwise False.
+    """
     totp = pyotp.TOTP(secret_key)
     return totp.verify(otp)
+
 
 # Routes
 @app.route('/')
 def home():
     return render_template('index.html')
+
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -112,19 +141,22 @@ def register():
             qr_code_img = generate_qr_code(totp_uri)
 
             # Insert user into the database
-            with mysql.connection.cursor() as cur:
-                cur.execute("INSERT INTO users (username, password_hash, role, secret_key) VALUES (%s, %s, %s, %s)",
-                            (username, password_hash, role, secret_key))
-                mysql.connection.commit()
+            with connection.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO users (username, password_hash, role, secret_key) VALUES (%s, %s, %s, %s)",
+                    (username, password_hash, role, secret_key)
+                )
+                connection.commit()
 
             # Redirect to a page to display the secret key and QR code
             return render_template('setup_2fa.html', secret_key=secret_key, qr_code_img=qr_code_img)
 
         except Exception as e:
-            mysql.connection.rollback()
-            return render_template('register.html', error=str(e))
+            connection.rollback()
+            return render_template('register.html', error=f"Error during registration: {str(e)}")
 
     return render_template('register.html')
+
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -132,60 +164,67 @@ def login():
         username = request.form['username']
         password = request.form['password']
 
-        cur = mysql.connection.cursor()
-        cur.execute("SELECT user_id, username, password_hash, role, secret_key, is_active FROM users WHERE username = %s", (username,))
-        user = cur.fetchone()
-        cur.close()
+        try:
+            with connection.cursor() as cur:
+                cur.execute("SELECT user_id, username, password_hash, role, secret_key, is_active FROM users WHERE username = %s", (username,))
+                user = cur.fetchone()
 
-        if user and bcrypt.checkpw(password.encode('utf-8'), user[2].encode('utf-8')):
-            if user[5] == 0:  # Check if the account is inactive
-                return render_template('login.html', error="Your account is inactive. Please contact the admin.")
-            if user[4]:  # 2FA enabled
-                return redirect(url_for('verify_2fa', user_id=user[0]))
-            else:
-                user_obj = User(user[0], user[1], user[3])
-                login_user(user_obj)
-                if user[3] == 'Admin':
-                    return redirect(url_for('admin_dashboard'))
-                elif user[3] == 'Teacher':
-                    return redirect(url_for('teacher_dashboard'))
+            if user and bcrypt.checkpw(password.encode('utf-8'), user[2].encode('utf-8')):
+                if user[5] == 0:  # Check if the account is inactive
+                    return render_template('login.html', error="Your account is inactive. Please contact the admin.")
+                if user[4]:  # 2FA enabled
+                    return redirect(url_for('verify_2fa', user_id=user[0]))
                 else:
-                    return redirect(url_for('student_dashboard'))
-        else:
-            return render_template('login.html', error="Invalid username or password")
+                    user_obj = User(user[0], user[1], user[3])
+                    login_user(user_obj)
+                    if user[3] == 'Admin':
+                        return redirect(url_for('admin_dashboard'))
+                    elif user[3] == 'Teacher':
+                        return redirect(url_for('teacher_dashboard'))
+                    else:
+                        return redirect(url_for('student_dashboard'))
+            else:
+                return render_template('login.html', error="Invalid username or password")
+        except Exception as e:
+            return render_template('login.html', error=f"An error occurred: {str(e)}")
+
     return render_template('login.html')
+
 
 @app.route('/verify_2fa/<int:user_id>', methods=['GET', 'POST'])
 def verify_2fa(user_id):
     if request.method == 'POST':
         otp = request.form['otp']
 
-        # Fetch the user's secret key and role
-        cur = mysql.connection.cursor()
-        cur.execute("SELECT secret_key, role FROM users WHERE user_id = %s", (user_id,))
-        result = cur.fetchone()
-        cur.close()
+        try:
+            with connection.cursor() as cur:
+                cur.execute("SELECT secret_key, role FROM users WHERE user_id = %s", (user_id,))
+                result = cur.fetchone()
 
-        if result:
-            secret_key, role = result
+            if result:
+                secret_key, role = result
 
-            # Verify the OTP
-            if verify_otp(secret_key, otp):
-                user_obj = User(user_id, "", role)
-                login_user(user_obj)
+                # Verify the OTP
+                if verify_otp(secret_key, otp):
+                    user_obj = User(user_id, "", role)
+                    login_user(user_obj)
 
-                # Redirect based on role
-                if role == 'Admin':
-                    return redirect(url_for('admin_dashboard'))
-                elif role == 'Teacher':
-                    return redirect(url_for('teacher_dashboard'))
-                elif role == 'Student':
-                    return redirect(url_for('student_dashboard'))
+                    # Redirect based on role
+                    if role == 'Admin':
+                        return redirect(url_for('admin_dashboard'))
+                    elif role == 'Teacher':
+                        return redirect(url_for('teacher_dashboard'))
+                    elif role == 'Student':
+                        return redirect(url_for('student_dashboard'))
+                else:
+                    return render_template('verify_2fa.html', error="Invalid OTP", user_id=user_id)
             else:
-                return render_template('verify_2fa.html', error="Invalid OTP", user_id=user_id)
-        else:
-            return render_template('verify_2fa.html', error="User not found", user_id=user_id)
+                return render_template('verify_2fa.html', error="User not found", user_id=user_id)
+        except Exception as e:
+            return render_template('verify_2fa.html', error=f"An error occurred: {str(e)}", user_id=user_id)
+    
     return render_template('verify_2fa.html', user_id=user_id)
+
 
 @app.route('/reset_password', methods=['GET', 'POST'])
 def reset_password():
@@ -199,188 +238,233 @@ def reset_password():
 @app.route('/manage_users')
 @login_required
 def manage_users():
-    # Fetch all users from the database
-    cur = mysql.connection.cursor()
-    cur.execute("SELECT user_id, username, role, is_active FROM users")
-    users = cur.fetchall()
-    cur.close()
-
-    # Render the manage_users template with the list of users
-    return render_template('manage_users.html', users=users)
+    try:
+        with connection.cursor() as cur:
+            cur.execute("SELECT user_id, username, role, is_active FROM users")
+            users = cur.fetchall()
+        return render_template('manage_users.html', users=users)
+    except Exception as e:
+        return render_template('manage_users.html', error=f"An error occurred: {str(e)}")
 
 @app.route('/edit_user/<int:user_id>', methods=['GET', 'POST'])
 @login_required
 def edit_user(user_id):
-    if request.method == 'POST':
-        # Handle form submission to update the user
-        username = request.form['username']
-        role = request.form['role']
+    # Role check to allow only admins
+    if current_user.role != 'Admin':
+        return redirect(url_for('home'))
 
-        cur = mysql.connection.cursor()
-        cur.execute("UPDATE users SET username = %s, role = %s WHERE user_id = %s",
-                    (username, role, user_id))
-        mysql.connection.commit()
-        cur.close()
+    try:
+        if request.method == 'POST':
+            # Handle form submission to update the user
+            username = request.form['username']
+            role = request.form['role']
 
-        return redirect(url_for('manage_users'))
+            with connection.cursor() as cur:
+                cur.execute("UPDATE users SET username = %s, role = %s WHERE user_id = %s",
+                            (username, role, user_id))
+                connection.commit()
 
-    # Fetch the user's current details
-    cur = mysql.connection.cursor()
-    cur.execute("SELECT user_id, username, role FROM users WHERE user_id = %s", (user_id,))
-    user = cur.fetchone()
-    cur.close()
+            return redirect(url_for('manage_users'))
 
-    if user:
-        return render_template('edit_user.html', user=user)
-    else:
-        return redirect(url_for('manage_users'))
+        # Fetch the user's current details
+        with connection.cursor() as cur:
+            cur.execute("SELECT user_id, username, role FROM users WHERE user_id = %s", (user_id,))
+            user = cur.fetchone()
+
+        if user:
+            return render_template('edit_user.html', user=user)
+        else:
+            return redirect(url_for('manage_users'))
+    except Exception as e:
+        return render_template('edit_user.html', error=f"An error occurred: {str(e)}")
     
 
 @app.route('/delete_user/<int:user_id>', methods=['POST'])
 @login_required
 def delete_user(user_id):
-    # Delete the user from the database
-    cur = mysql.connection.cursor()
-    cur.execute("DELETE FROM users WHERE user_id = %s", (user_id,))
-    mysql.connection.commit()
-    cur.close()
+    # Role check to allow only admins
+    if current_user.role != 'Admin':
+        return redirect(url_for('home'))
 
-    return redirect(url_for('manage_users'))
+    try:
+        with connection.cursor() as cur:
+            cur.execute("DELETE FROM users WHERE user_id = %s", (user_id,))
+            connection.commit()
+
+        return redirect(url_for('manage_users'))
+    except Exception as e:
+        return redirect(url_for('manage_users', error=f"An error occurred: {str(e)}"))
+
 
 @app.route('/delete_teacher/<int:teacher_id>', methods=['POST'])
 @login_required
 def delete_teacher(teacher_id):
-    # Delete the teacher from the database
-    cur = mysql.connection.cursor()
-    cur.execute("UPDATE `teachers` SET `status` = 0 WHERE tbl_id = %s", (teacher_id,))
-    mysql.connection.commit()
-    cur.close()
+    # Role check to allow only admins
+    if current_user.role != 'Admin':
+        return redirect(url_for('home'))
 
-    return redirect(url_for('admin_manage_teachers'))
+    try:
+        with connection.cursor() as cur:
+            cur.execute("UPDATE teachers SET status = 0 WHERE tbl_id = %s", (teacher_id,))
+            connection.commit()
+
+        return redirect(url_for('admin_manage_teachers'))
+    except Exception as e:
+        return redirect(url_for('admin_manage_teachers', error=f"An error occurred: {str(e)}"))
+
 
 # Admin route to manage all courses
 @app.route('/admin/admin_manage_courses')
 @login_required
 def admin_manage_courses():
-    # if current_user.role != 'Admin':
-        # return redirect(url_for('teacher_dashboard'))
-    
-    # Fetch all courses from the database
-    cur = mysql.connection.cursor()
-    cur.execute("SELECT course_id, title, description, created_at FROM courses")
-    courses = cur.fetchall()
-    cur.close()
+    if current_user.role != 'Admin':
+        return redirect(url_for('teacher_dashboard'))
 
-    return render_template('admin_manage_courses.html', courses=courses)
+    try:
+        # Fetch all courses from the database
+        with connection.cursor() as cur:
+            cur.execute("SELECT course_id, title, description, created_at FROM courses")
+            courses = cur.fetchall()
+
+        return render_template('admin_manage_courses.html', courses=courses)
+    except Exception as e:
+        return render_template('admin_manage_courses.html', error=f"An error occurred: {str(e)}")
+
 
 @app.route('/admin/admin_manage_teachers')
 @login_required
 def admin_manage_teachers():
-     if current_user.role != 'Admin':
-         # return redirect(url_for('teacher_dashboard'))
-        return render_template('login.html', error="Invalid user")
-    
-    # Fetch all teachers from the database
-     cur = mysql.connection.cursor()
-     cur.execute("SELECT t.`tbl_id`, (SELECT u.`username` FROM `users` u WHERE u.`user_id` = t.`teacher_id`) , (SELECT c.`title` FROM `courses` c WHERE c.`course_id` = t.`course_id`), t.`created_at` FROM `teachers` t WHERE t.`status` = 1")
-     teachers = cur.fetchall()
-     cur.close()
+    if current_user.role != 'Admin':
+        return render_template('admin_error.html', error="Unauthorized access")
 
-     return render_template('admin_manage_teachers.html', teachers= teachers)
-    
+    try:
+        with connection.cursor() as cur:
+            # Fetch all active teachers with their respective course titles
+            cur.execute("""
+                SELECT t.tbl_id, 
+                       (SELECT u.username FROM users u WHERE u.user_id = t.teacher_id), 
+                       (SELECT c.title FROM courses c WHERE c.course_id = t.course_id), 
+                       t.created_at 
+                FROM teachers t 
+                WHERE t.status = 1
+            """)
+            teachers = cur.fetchall()
 
+        return render_template('admin_manage_teachers.html', teachers=teachers)
+    except Exception as e:
+        return render_template('admin_error.html', error=f"An error occurred: {str(e)}")
+
+    
 @app.route('/admin/add_course', methods=['GET', 'POST'])
 @login_required
 def add_course():
+    if current_user.role != 'Admin':
+        return render_template('admin_error.html', error="Unauthorized access")
     
     if request.method == 'POST':
         title = request.form['title']
         description = request.form['description']
 
-        cur = mysql.connection.cursor()
-        cur.execute("INSERT INTO courses (title, description, teacher_id) VALUES (%s, %s, %s)", 
-                    (title, description, current_user.id))
-        mysql.connection.commit()
-        cur.close()
+        try:
+            with connection.cursor() as cur:
+                cur.execute("INSERT INTO courses (title, description, teacher_id) VALUES (%s, %s, %s)", 
+                            (title, description, current_user.id))
+                connection.commit()
 
-        return redirect(url_for('admin_manage_courses'))
+            return redirect(url_for('admin_manage_courses'))
+        except Exception as e:
+            return render_template('admin_error.html', error=f"An error occurred: {str(e)}")
 
     return render_template('add_course.html')
+
 
 @app.route('/admin/add_teacher', methods=['GET', 'POST'])
 @login_required
 def add_teacher():
+    if current_user.role != 'Admin':
+        return render_template('admin_error.html', error="Unauthorized access")
+
     if request.method == 'POST':
         teacher = request.form['teacher']
         course = request.form['course']
 
-        cur = mysql.connection.cursor()
-        cur.execute("INSERT INTO `teachers`(`teacher_id`, `course_id`) VALUES (%s, %s)", 
-                    (teacher, course))
-        mysql.connection.commit()
-        cur.close()
+        try:
+            with connection.cursor() as cur:
+                cur.execute("INSERT INTO teachers (teacher_id, course_id) VALUES (%s, %s)", 
+                            (teacher, course))
+                connection.commit()
 
-        return redirect(url_for('admin_manage_teachers'))
+            return redirect(url_for('admin_manage_teachers'))
+        except Exception as e:
+            return render_template('admin_error.html', error=f"An error occurred: {str(e)}")
 
-    # Fetch all teachers and courses for the select boxes
-    cur = mysql.connection.cursor()
+    try:
+        with connection.cursor() as cur:
+            # Fetch teachers (teachers are users with the role 'Teacher')
+            cur.execute("SELECT user_id, username FROM users WHERE role = 'Teacher'")
+            teachers = cur.fetchall()
 
-    # Fetch teachers (teachers are users with the role 'Teacher')
-    cur.execute("SELECT user_id, username FROM users WHERE role = 'Teacher'")
-    teachers = cur.fetchall()
+            # Fetch courses
+            cur.execute("SELECT course_id, title FROM courses")
+            courses = cur.fetchall()
 
-    # Fetch courses
-    cur.execute("SELECT course_id, title FROM courses")
-    courses = cur.fetchall()
+        return render_template('add_teacher.html', teachers=teachers, courses=courses)
+    except Exception as e:
+        return render_template('admin_error.html', error=f"An error occurred: {str(e)}")
 
-    cur.close()
-
-    # Pass the data to the template
-    return render_template('add_teacher.html', teachers=teachers, courses=courses)
 
 @app.route('/edit_course/<int:course_id>', methods=['GET', 'POST'])
 @login_required
 def edit_course(course_id):
-    cur = mysql.connection.cursor()
+    try:
+        with connection.cursor() as cur:
+            # Fetch the course details
+            cur.execute("SELECT course_id, title, description, teacher_id FROM courses WHERE course_id = %s", (course_id,))
+            course = cur.fetchone()
 
-    # Fetch the course details
-    cur.execute("SELECT course_id, title, description, teacher_id FROM courses WHERE course_id = %s", (course_id,))
-    course = cur.fetchone()
+        if not course:
+            return redirect(url_for('admin_manage_courses'))  # Course not found
 
-    if not course:
-        cur.close()
-        return redirect(url_for('admin_manage_courses'))  # Course not found
+        # Check if the current user is the teacher who created the course or an admin
+        if current_user.role != 'Admin' and current_user.id != course[3]:  # course[3] is teacher_id
+            return render_template('teacher_error.html', error="Unauthorized access")
 
-    # Check if the current user is the teacher who created the course or an admin
-    if current_user.role != 'Admin' and current_user.id != course[3]:  # course[3] is teacher_id
-        cur.close()
-        return redirect(url_for('admin_manage_courses'))  # Unauthorized access
+        if request.method == 'POST':
+            title = request.form['title']
+            description = request.form['description']
 
-    if request.method == 'POST':
-        title = request.form['title']
-        description = request.form['description']
-        cur.execute("UPDATE courses SET title = %s, description = %s WHERE course_id = %s", 
-                    (title, description, course_id))
-        mysql.connection.commit()
-        cur.close()
-        return redirect(url_for('admin_manage_courses'))
+            with connection.cursor() as cur:
+                cur.execute("UPDATE courses SET title = %s, description = %s WHERE course_id = %s", 
+                            (title, description, course_id))
+                connection.commit()
 
-    cur.close()
-    return render_template('edit_course.html', course=course)
+            return redirect(url_for('admin_manage_courses'))
+
+        return render_template('edit_course.html', course=course)
+    except Exception as e:
+        return render_template('admin_error.html', error=f"An error occurred: {str(e)}")
+
 
 
 @app.route('/view_course/<int:course_id>')
 @login_required
 def view_course(course_id):
-    cur = mysql.connection.cursor()
-    cur.execute("SELECT title, description, created_at FROM courses WHERE course_id = %s", (course_id,))
-    courses = cur.fetchone()  # Fetch all courses for this teacher
-    cur.close()
+    try:
+        with connection.cursor() as cur:
+            cur.execute("SELECT title, description, created_at FROM courses WHERE course_id = %s", (course_id,))
+            course = cur.fetchone()  # Fetch the course details
 
-    if current_user.role != 'Teacher':
-        return render_template('view_course.html', courses=courses)
-    else:
-        return render_template('teacher_view_course.html', courses=courses)
+        if current_user.role != 'Teacher':
+            return render_template('view_course.html', course=course)
+        else:
+            return render_template('teacher_view_course.html', course=course)
+    except Exception as e:
+        if current_user.role == 'Admin':
+            return render_template('admin_error.html', error=f"An error occurred: {str(e)}")
+        elif current_user.role == 'Teacher':
+            return render_template('teacher_error.html', error=f"An error occurred: {str(e)}")
+        else:
+            return render_template('student_error.html', error=f"An error occurred: {str(e)}")
 
     
 @app.route('/delete_course/<int:course_id>', methods=['POST'])
@@ -388,49 +472,54 @@ def view_course(course_id):
 def delete_course(course_id):
     if current_user.role != 'Teacher':
         return redirect(url_for('admin_dashboard'))
-    
-    cur = mysql.connection.cursor()
-    cur.execute("DELETE FROM courses WHERE course_id = %s AND teacher_id = %s", 
-                (course_id, current_user.id))
-    mysql.connection.commit()
-    cur.close()
-    return redirect(url_for('teacher_manage_courses'))
+
+    try:
+        with connection.cursor() as cur:
+            cur.execute("DELETE FROM courses WHERE course_id = %s AND teacher_id = %s", 
+                        (course_id, current_user.id))
+            connection.commit()
+
+        return redirect(url_for('teacher_manage_courses'))
+    except Exception as e:
+        return render_template('teacher_error.html', error=f"An error occurred: {str(e)}")
+
 
 @app.route('/admin_dashboard')
+@login_required
 def admin_dashboard():
     if current_user.role != 'Admin':
         return redirect(url_for('teacher_dashboard'))
-    
-    cur = mysql.connection.cursor()
 
-    # Get total users count
-    cur.execute("SELECT COUNT(*) FROM users")
-    total_users = cur.fetchone()[0]
+    try:
+        with connection.cursor() as cur:
+            # Get total users count
+            cur.execute("SELECT COUNT(*) FROM users")
+            total_users = cur.fetchone()[0]
 
-    # Get total courses count
-    cur.execute("SELECT COUNT(*) FROM courses")
-    total_courses = cur.fetchone()[0]
+            # Get total courses count
+            cur.execute("SELECT COUNT(*) FROM courses")
+            total_courses = cur.fetchone()[0]
 
-    # Get total teachers assigned count
-    cur.execute("SELECT COUNT(*) FROM teachers WHERE `status` = 1")
-    total_teachers = cur.fetchone()[0]
+            # Get total teachers assigned count
+            cur.execute("SELECT COUNT(*) FROM teachers WHERE status = 1")
+            total_teachers = cur.fetchone()[0]
 
-    # Get active sessions (assuming active users have a `last_login` timestamp)
-    # cur.execute("SELECT COUNT(*) FROM users WHERE last_login >= NOW() - INTERVAL 30 MINUTE")
-    # active_sessions = cur.fetchone()[0]
+            # Uncomment these lines if active sessions and recent activities tracking is needed
+            # cur.execute("SELECT COUNT(*) FROM users WHERE last_login >= NOW() - INTERVAL 30 MINUTE")
+            # active_sessions = cur.fetchone()[0]
 
-    # Get recent activities (limit to 5 latest actions)
-    # cur.execute("SELECT message FROM activity_log ORDER BY created_at DESC LIMIT 5")
-    # recent_activities = [row[0] for row in cur.fetchall()]
+            # cur.execute("SELECT message FROM activity_log ORDER BY created_at DESC LIMIT 5")
+            # recent_activities = [row[0] for row in cur.fetchall()]
 
-    cur.close()
+        return render_template('admin_dashboard.html', 
+                               total_users=total_users, 
+                               total_courses=total_courses, 
+                               total_teachers=total_teachers)
+                               # active_sessions=active_sessions,
+                               # recent_activities=recent_activities)
+    except Exception as e:
+        return render_template('admin_error.html', error=f"An error occurred: {str(e)}")
 
-    return render_template('admin_dashboard.html', 
-                           total_users=total_users, 
-                           total_courses=total_courses,
-                           total_teachers=total_teachers) 
-                           # active_sessions=active_sessions,
-                           # recent_activities=recent_activities)
 
 
 @app.route('/logout')
@@ -444,43 +533,48 @@ def logout():
 @app.route('/activate_user/<int:user_id>', methods=['POST'])
 @login_required
 def activate_user(user_id):
-    # Activate the user
-    cur = mysql.connection.cursor()
-    cur.execute("UPDATE users SET is_active = 1 WHERE user_id = %s", (user_id,))
-    mysql.connection.commit()
-    cur.close()
+    try:
+        with connection.cursor() as cur:
+            cur.execute("UPDATE users SET is_active = 1 WHERE user_id = %s", (user_id,))
+            connection.commit()
 
-    return redirect(url_for('manage_users'))
+        return redirect(url_for('manage_users'))
+    except Exception as e:
+        return render_template('admin_error.html', error=f"An error occurred: {str(e)}")
+
 
 @app.route('/deactivate_user/<int:user_id>', methods=['POST'])
 @login_required
 def deactivate_user(user_id):
-    # Deactivate the user
-    cur = mysql.connection.cursor()
-    cur.execute("UPDATE users SET is_active = 0 WHERE user_id = %s", (user_id,))
-    mysql.connection.commit()
-    cur.close()
+    try:
+        with connection.cursor() as cur:
+            cur.execute("UPDATE users SET is_active = 0 WHERE user_id = %s", (user_id,))
+            connection.commit()
 
-    return redirect(url_for('manage_users'))
+        return redirect(url_for('manage_users'))
+    except Exception as e:
+        return render_template('admin_error.html', error=f"An error occurred: {str(e)}")
+
 
 # Teacher Dashboard
 @app.route('/teacher_dashboard')
 @login_required
 def teacher_dashboard():
-    # Fetch quick stats for the teacher
-    cur = mysql.connection.cursor()
-    cur.execute("SELECT COUNT(*) FROM teachers WHERE teacher_id = %s AND `status` = 1", (current_user.id,))
-    total_courses = cur.fetchone()[0]
+    try:
+        with connection.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM teachers WHERE teacher_id = %s AND status = 1", (current_user.id,))
+            total_courses = cur.fetchone()[0]
 
-    cur.execute("SELECT COUNT(*) FROM submissions WHERE course_id IN (SELECT course_id FROM courses WHERE teacher_id = %s) AND grade IS NULL", (current_user.id,))
-    pending_submissions = cur.fetchone()[0]
+            cur.execute("SELECT COUNT(*) FROM submissions WHERE course_id IN (SELECT course_id FROM courses WHERE teacher_id = %s) AND grade IS NULL", (current_user.id,))
+            pending_submissions = cur.fetchone()[0]
 
-    cur.execute("SELECT COUNT(DISTINCT student_id) FROM enrollments WHERE course_id IN (SELECT course_id FROM courses WHERE teacher_id = %s)", (current_user.id,))
-    total_students = cur.fetchone()[0]
+            cur.execute("SELECT COUNT(DISTINCT student_id) FROM enrollments WHERE course_id IN (SELECT course_id FROM courses WHERE teacher_id = %s)", (current_user.id,))
+            total_students = cur.fetchone()[0]
 
-    cur.close()
+        return render_template('teacher_dashboard.html', total_courses=total_courses, pending_submissions=pending_submissions, total_students=total_students)
+    except Exception as e:
+        return render_template('teacher_error.html', error=f"An error occurred: {str(e)}")
 
-    return render_template('teacher_dashboard.html', total_courses=total_courses, pending_submissions=pending_submissions, total_students=total_students)
 
 # Teacher route to manage their own courses
 @app.route('/teacher/manage_courses')
@@ -488,14 +582,16 @@ def teacher_dashboard():
 def teacher_manage_courses():
     if current_user.role != 'Teacher':
         return redirect(url_for('teacher_dashboard'))
-    
-    # Fetch courses taught by the current teacher
-    cur = mysql.connection.cursor()
-    cur.execute("SELECT t.course_id, (SELECT c.title FROM courses c WHERE c.course_id = t.course_id ), (SELECT  c.description FROM courses c WHERE c.course_id = t.course_id ) FROM teachers t WHERE t.teacher_id = %s AND t.`status` = 1", (current_user.id,))
-    courses = cur.fetchall()
-    cur.close()
 
-    return render_template('teacher_manage_courses.html', courses=courses)
+    try:
+        with connection.cursor() as cur:
+            cur.execute("SELECT t.course_id, (SELECT c.title FROM courses c WHERE c.course_id = t.course_id), (SELECT c.description FROM courses c WHERE c.course_id = t.course_id) FROM teachers t WHERE t.teacher_id = %s AND t.status = 1", (current_user.id,))
+            courses = cur.fetchall()
+
+        return render_template('teacher_manage_courses.html', courses=courses)
+    except Exception as e:
+        return render_template('teacher_error.html', error=f"An error occurred: {str(e)}")
+
 
 # Teacher route to manage students
 @app.route('/teacher/manage_students')
@@ -503,65 +599,72 @@ def teacher_manage_courses():
 def teacher_manage_students():
     if current_user.role != 'Teacher':
         return redirect(url_for('teacher_dashboard'))
-    
-    # Fetch courses assigned to the teacher
-    cur = mysql.connection.cursor()
-    cur.execute("SELECT t.`course_id`, (SELECT  c.`title` FROM courses c WHERE c.course_id = t.course_id) FROM teachers t WHERE t.teacher_id = %s AND t.`status` = 1", (current_user.id,))
-    courses = cur.fetchall()
-    cur.close()
 
-    return render_template('teacher_manage_students.html', courses=courses)
+    try:
+        with connection.cursor() as cur:
+            cur.execute("SELECT t.course_id, (SELECT c.title FROM courses c WHERE c.course_id = t.course_id) FROM teachers t WHERE t.teacher_id = %s AND t.status = 1", (current_user.id,))
+            courses = cur.fetchall()
 
-# fetch students
+        return render_template('teacher_manage_students.html', courses=courses)
+    except Exception as e:
+        return render_template('teacher_error.html', error=f"An error occurred: {str(e)}")
+
+
+# Fetch students
 @app.route('/teacher/get_students')
 @login_required
 def get_students():
     course_id = request.args.get('course_id')
-    
-    # Fetch all students
-    cur = mysql.connection.cursor()
-    cur.execute("SELECT user_id, username, email FROM users WHERE role = 'Student'")
-    students = cur.fetchall()
 
-    # Fetch enrolled students for the selected course
-    cur.execute("SELECT student_id FROM enrollments WHERE course_id = %s", (course_id,))
-    enrolled_students = {row[0] for row in cur.fetchall()}
-    cur.close()
+    try:
+        with connection.cursor() as cur:
+            # Fetch all students
+            cur.execute("SELECT user_id, username, email FROM users WHERE role = 'Student'")
+            students = cur.fetchall()
 
-    # Prepare response data
-    student_data = []
-    for student in students:
-        student_data.append({
-            "user_id": student[0],
-            "username": student[1],
-            "email": student[2],
-            "enrolled": student[0] in enrolled_students
-        })
+            # Fetch enrolled students for the selected course
+            cur.execute("SELECT student_id FROM enrollments WHERE course_id = %s", (course_id,))
+            enrolled_students = {row[0] for row in cur.fetchall()}
 
-    return jsonify({"students": student_data})
+        # Prepare response data
+        student_data = []
+        for student in students:
+            student_data.append({
+                "user_id": student[0],
+                "username": student[1],
+                "email": student[2],
+                "enrolled": student[0] in enrolled_students
+            })
 
-# Add a route to handle enrollment/unenrollment of students:
+        return jsonify({"students": student_data})
+    except Exception as e:
+        return render_template('teacher_error.html', error=f"An error occurred: {str(e)}")
+
+
+# Add a route to handle enrollment/unenrollment of students
 @app.route('/teacher/enroll_students', methods=['POST'])
 @login_required
 def enroll_students():
     course_id = request.form['course_id']
     student_ids = request.form.getlist('student_ids')
 
-    cur = mysql.connection.cursor()
+    try:
+        with connection.cursor() as cur:
+            # Remove all existing enrollments for the course
+            cur.execute("DELETE FROM enrollments WHERE course_id = %s", (course_id,))
 
-    # Remove all existing enrollments for the course
-    cur.execute("DELETE FROM enrollments WHERE course_id = %s", (course_id,))
+            # Add new enrollments
+            for student_id in student_ids:
+                cur.execute("INSERT INTO enrollments (student_id, course_id) VALUES (%s, %s)",
+                            (student_id, course_id))
 
-    # Add new enrollments
-    for student_id in student_ids:
-        cur.execute("INSERT INTO enrollments (student_id, course_id) VALUES (%s, %s)",
-                    (student_id, course_id))
+            connection.commit()
 
-    mysql.connection.commit()
-    cur.close()
+        flash('Enrollments updated successfully!', 'success')
+        return redirect(url_for('teacher_manage_students'))
+    except Exception as e:
+        return render_template('teacher_error.html', error=f"An error occurred: {str(e)}")
 
-    flash('Enrollments updated successfully!', 'success')
-    return redirect(url_for('teacher_manage_students'))
 
 # Teacher route to update profile
 @app.route('/teacher/profile', methods=['GET', 'POST'])
@@ -571,19 +674,23 @@ def teacher_profile():
         username = request.form['username']
         email = request.form['email']
 
-        # Update the user's profile in the database
-        cur = mysql.connection.cursor()
-        cur.execute("UPDATE users SET username = %s, email = %s WHERE user_id = %s",
-                    (username, email, current_user.id))
-        mysql.connection.commit()
-        cur.close()
+        try:
+            # Update the user's profile in the database
+            with connection.cursor() as cur:
+                cur.execute("UPDATE users SET username = %s, email = %s WHERE user_id = %s",
+                            (username, email, current_user.id))
+                connection.commit()
 
-        flash('Profile updated successfully!', 'success')
+            flash('Profile updated successfully!', 'success')
+        except Exception as e:
+            flash(f"An error occurred: {str(e)}", 'error')
+
         return redirect(url_for('teacher_profile'))
 
     return render_template('teacher_profile.html')
 
-# change password
+
+# Change password
 @app.route('/teacher/change_password', methods=['POST'])
 @login_required
 def teacher_change_password():
@@ -591,136 +698,164 @@ def teacher_change_password():
     new_password = request.form['new_password']
     confirm_password = request.form['confirm_password']
 
-    # Verify the current password
-    cur = mysql.connection.cursor()
-    cur.execute("SELECT password_hash FROM users WHERE user_id = %s", (current_user.id,))
-    user = cur.fetchone()
-    cur.close()
+    try:
+        with connection.cursor() as cur:
+            # Verify the current password
+            cur.execute("SELECT password_hash FROM users WHERE user_id = %s", (current_user.id,))
+            user = cur.fetchone()
 
-    if user and bcrypt.checkpw(current_password.encode('utf-8'), user[0].encode('utf-8')):
-        if new_password == confirm_password:
-            # Hash the new password
-            new_password_hash = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt())
+        if user and bcrypt.checkpw(current_password.encode('utf-8'), user[0].encode('utf-8')):
+            if new_password == confirm_password:
+                # Hash the new password
+                new_password_hash = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt())
 
-            # Update the password in the database
-            cur = mysql.connection.cursor()
-            cur.execute("UPDATE users SET password_hash = %s WHERE user_id = %s",
-                        (new_password_hash, current_user.id))
-            mysql.connection.commit()
-            cur.close()
+                # Update the password in the database
+                with connection.cursor() as cur:
+                    cur.execute("UPDATE users SET password_hash = %s WHERE user_id = %s",
+                                (new_password_hash, current_user.id))
+                    connection.commit()
 
-            flash('Password changed successfully!', 'success')
+                flash('Password changed successfully!', 'success')
+            else:
+                flash('New passwords do not match.', 'error')
         else:
-            flash('New passwords do not match.', 'error')
-    else:
-        flash('Current password is incorrect.', 'error')
+            flash('Current password is incorrect.', 'error')
+    except Exception as e:
+        flash(f"An error occurred: {str(e)}", 'error')
 
     return redirect(url_for('teacher_profile'))
 
-# enable/disable 2fa
+
+# Enable 2FA
 @app.route('/enable_2fa')
 @login_required
 def enable_2fa():
-    # Generate a new secret key for 2FA
-    secret_key = generate_secret_key()
+    try:
+        # Generate a new secret key for 2FA
+        secret_key = generate_secret_key()
 
-    # Update the user's secret key in the database
-    cur = mysql.connection.cursor()
-    cur.execute("UPDATE users SET secret_key = %s WHERE user_id = %s",
-                (secret_key, current_user.id))
-    mysql.connection.commit()
-    cur.close()
+        # Update the user's secret key in the database
+        with connection.cursor() as cur:
+            cur.execute("UPDATE users SET secret_key = %s WHERE user_id = %s", (secret_key, current_user.id))
+            connection.commit()
 
-    flash('2FA enabled successfully!', 'success')
+        flash('2FA enabled successfully!', 'success')
+    except Exception as e:
+        flash(f"An error occurred: {str(e)}", 'error')
+
     return redirect(url_for('teacher_profile'))
 
+
+# Disable 2FA
 @app.route('/disable_2fa')
 @login_required
 def disable_2fa():
-    # Remove the user's secret key from the database
-    cur = mysql.connection.cursor()
-    cur.execute("UPDATE users SET secret_key = NULL WHERE user_id = %s", (current_user.id,))
-    mysql.connection.commit()
-    cur.close()
+    try:
+        # Remove the user's secret key from the database
+        with connection.cursor() as cur:
+            cur.execute("UPDATE users SET secret_key = NULL WHERE user_id = %s", (current_user.id,))
+            connection.commit()
 
-    flash('2FA disabled successfully!', 'success')
+        flash('2FA disabled successfully!', 'success')
+    except Exception as e:
+        flash(f"An error occurred: {str(e)}", 'error')
+
     return redirect(url_for('teacher_profile'))
 
-# route to fetch submissions for the teacher's courses:
+
+# Route to fetch submissions for the teacher's courses:
 @app.route('/view_submissions')
 @login_required
 def view_submissions():
     if current_user.role != 'Teacher':
         return redirect(url_for('teacher_dashboard'))
-    
-    # Fetch submissions for the teacher's courses
-    cur = mysql.connection.cursor()
-    cur.execute("""
-        SELECT s.submission_id, u.username, c.title, s.submission_date, s.grade, s.feedback
-        FROM submissions s
-        JOIN users u ON s.student_id = u.user_id        
-        JOIN courses c ON s.course_id = c.course_id
-        JOIN teachers t ON s.course_id = t.course_id
-        WHERE t.teacher_id = %s
-    """, (current_user.id,))
-    submissions = cur.fetchall()
-    cur.close()
 
-    return render_template('view_submissions.html', submissions=submissions)
+    try:
+        # Fetch submissions for the teacher's courses
+        with connection.cursor() as cur:
+            cur.execute("""
+                SELECT s.submission_id, u.username, c.title, s.submission_date, s.grade, s.feedback
+                FROM submissions s
+                JOIN users u ON s.student_id = u.user_id
+                JOIN courses c ON s.course_id = c.course_id
+                JOIN teachers t ON s.course_id = t.course_id
+                WHERE t.teacher_id = %s
+            """, (current_user.id,))
+            submissions = cur.fetchall()
 
-    # route to handle grading submission
+        return render_template('view_submissions.html', submissions=submissions)
+    except Exception as e:
+        flash(f"An error occurred: {str(e)}", 'error')
+        return redirect(url_for('teacher_dashboard'))
 
+
+# Route to handle grading submission
 @app.route('/grade_submission/<int:submission_id>', methods=['POST'])
 @login_required
 def grade_submission(submission_id):
     grade = request.form['grade']
 
-    cur = mysql.connection.cursor()
-    cur.execute("UPDATE submissions SET grade = %s WHERE submission_id = %s", (grade, submission_id))
-    mysql.connection.commit()
-    cur.close()
+    try:
+        with connection.cursor() as cur:
+            cur.execute("UPDATE submissions SET grade = %s WHERE submission_id = %s", (grade, submission_id))
+            connection.commit()
 
-    flash('Grade updated successfully!', 'success')
+        flash('Grade updated successfully!', 'success')
+    except Exception as e:
+        flash(f"An error occurred: {str(e)}", 'error')
+
     return redirect(url_for('view_submissions'))
 
-# route to handle adding feedback:
+
+# Route to handle adding feedback
 @app.route('/add_feedback/<int:submission_id>', methods=['POST'])
 @login_required
 def add_feedback(submission_id):
     feedback = request.form['feedback']
 
-    cur = mysql.connection.cursor()
-    cur.execute("UPDATE submissions SET feedback = %s WHERE submission_id = %s", (feedback, submission_id))
-    mysql.connection.commit()
-    cur.close()
+    try:
+        with connection.cursor() as cur:
+            cur.execute("UPDATE submissions SET feedback = %s WHERE submission_id = %s", (feedback, submission_id))
+            connection.commit()
 
-    flash('Feedback updated successfully!', 'success')
+        flash('Feedback updated successfully!', 'success')
+    except Exception as e:
+        flash(f"An error occurred: {str(e)}", 'error')
+
     return redirect(url_for('view_submissions'))
 
-# route to view detailed information about a submission
+
+# Route to view detailed information about a submission
 @app.route('/view_submission_details/<int:submission_id>')
 @login_required
 def view_submission_details(submission_id):
-    cur = mysql.connection.cursor()
-    cur.execute("""
-        SELECT s.submission_id, u.username, c.title, s.submission_date, s.grade, s.feedback, s.file_path
-        FROM submissions s
-        JOIN users u ON s.student_id = u.user_id
-        JOIN courses c ON s.course_id = c.course_id
-        WHERE s.submission_id = %s
-    """, (submission_id,))
-    submission = cur.fetchone()
-    cur.close()
+    try:
+        with connection.cursor() as cur:
+            cur.execute("""
+                SELECT s.submission_id, u.username, c.title, s.submission_date, s.grade, s.feedback, s.file_path
+                FROM submissions s
+                JOIN users u ON s.student_id = u.user_id
+                JOIN courses c ON s.course_id = c.course_id
+                WHERE s.submission_id = %s
+            """, (submission_id,))
+            submission = cur.fetchone()
 
-    if not submission:
-        flash('Submission not found.', 'error')
+        if not submission:
+            flash('Submission not found.', 'error')
+            return redirect(url_for('view_submissions'))
+
+        return render_template('view_submission_details.html', submission=submission)
+    except Exception as e:
+        flash(f"An error occurred: {str(e)}", 'error')
         return redirect(url_for('view_submissions'))
 
-    return render_template('view_submission_details.html', submission=submission)
 
 # This route allows teachers to upload assignments for their courses.
 
 # Configure upload folder for assignments
+import os
+from flask import send_from_directory
+
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads/assignments')
 ALLOWED_EXTENSIONS = {'pdf', 'doc', 'docx', 'txt'}
 
@@ -732,12 +867,13 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+
 @app.route('/teacher/upload_assignment', methods=['GET', 'POST'])
 @login_required
 def upload_assignment():
     if current_user.role != 'Teacher':
         return redirect(url_for('teacher_dashboard'))
-    
+
     if request.method == 'POST':
         course_id = request.form['course_id']
         title = request.form['title']
@@ -746,61 +882,84 @@ def upload_assignment():
         file = request.files['file']
 
         if file and allowed_file(file.filename):
-            # Save the file
-            filename = f"{current_user.id}_{course_id}_{file.filename}"
-            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            file.save(file_path)
+            try:
+                # Save the file with a unique name
+                filename = f"{current_user.id}_{course_id}_{file.filename}"
+                file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                file.save(file_path)
 
-            # Insert assignment into the database
-            cur = mysql.connection.cursor()
-            cur.execute("""
-                INSERT INTO assignments (course_id, title, description, due_date, file_path)
-                VALUES (%s, %s, %s, %s, %s)
-            """, (course_id, title, description, due_date, file_path))
-            mysql.connection.commit()
-            cur.close()
+                # Insert assignment into the database
+                with connection.cursor() as cur:
+                    cur.execute("""
+                        INSERT INTO assignments (course_id, title, description, due_date, file_path)
+                        VALUES (%s, %s, %s, %s, %s)
+                    """, (course_id, title, description, due_date, file_path))
+                    connection.commit()
 
-            flash('Assignment uploaded successfully!', 'success')
+                flash('Assignment uploaded successfully!', 'success')
+            except Exception as e:
+                flash(f"An error occurred while uploading the assignment: {str(e)}", 'error')
         else:
             flash('Invalid file type. Allowed types: pdf, doc, docx, txt.', 'error')
 
         return redirect(url_for('upload_assignment'))
 
     # Fetch courses taught by the current teacher
-    cur = mysql.connection.cursor()
-    cur.execute("SELECT course_id, title FROM courses WHERE teacher_id = %s", (current_user.id,))
-    courses = cur.fetchall()
-    cur.close()
+    with connection.cursor() as cur:
+        cur.execute("SELECT course_id, title FROM courses WHERE teacher_id = %s", (current_user.id,))
+        courses = cur.fetchall()
 
     # Fetch assignments for the teacher's courses
-    cur = mysql.connection.cursor()
-    cur.execute("""
-        SELECT a.assignment_id, c.title, a.title, a.description, a.due_date, a.file_path
-        FROM assignments a
-        JOIN courses c ON a.course_id = c.course_id
-        WHERE c.teacher_id = %s
-    """, (current_user.id,))
-    assignments = cur.fetchall()
-    cur.close()
+    with connection.cursor() as cur:
+        cur.execute("""
+            SELECT a.assignment_id, c.title, a.title, a.description, a.due_date, a.file_path
+            FROM assignments a
+            JOIN courses c ON a.course_id = c.course_id
+            WHERE c.teacher_id = %s
+        """, (current_user.id,))
+        assignments = cur.fetchall()
 
     return render_template('teacher_upload_assignment.html', courses=courses, assignments=assignments)
 
 
-# Add a route to allow teachers to download assignment files.
-
-@app.route('/download_assignment/<path:file_path>')
+# Route to allow teachers to download assignment files
+# Download submission route
+@app.route('/download_submission/<filename>')
 @login_required
-def download_assignment(file_path):
+def download_submission(filename):
     if current_user.role != 'Teacher':
         return redirect(url_for('teacher_dashboard'))
-    
-    return send_from_directory(app.config['UPLOAD_FOLDER'], file_path, as_attachment=True)
+
+    # Check if the file exists in the uploads directory
+    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    if not os.path.isfile(file_path):
+        abort(404)
+
+    # Serve the file using send_from_directory
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename, as_attachment=True)
+
+# Download assignment route
+@app.route('/download_assignment/<filename>')
+@login_required
+def download_assignment(filename):
+    if current_user.role != 'Teacher':
+        return redirect(url_for('teacher_dashboard'))
+
+    # Check if the file exists in the uploads directory
+    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    if not os.path.isfile(file_path):
+        abort(404)
+
+    # Serve the file using send_from_directory
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename, as_attachment=True)
+
 
 # Error Handlers in Flask
 # All errors are handled here 
 # 
 
 # Handle 404 (Page Not Found) errors
+# Error handler for 404 (Page Not Found)
 @app.errorhandler(404)
 def page_not_found(error):
     if current_user.is_authenticated:
@@ -812,6 +971,7 @@ def page_not_found(error):
             return render_template('student_error.html'), 404
     else:
         return render_template('generic_error.html'), 404  # Fallback for unauthenticated users
+
 
 # Handle 403 (Forbidden) errors
 @app.errorhandler(403)
@@ -826,6 +986,7 @@ def forbidden(error):
     else:
         return render_template('generic_error.html'), 403  # Fallback for unauthenticated users
 
+
 # Handle 500 (Internal Server Error) errors
 @app.errorhandler(500)
 def internal_server_error(error):
@@ -839,16 +1000,20 @@ def internal_server_error(error):
     else:
         return render_template('generic_error.html'), 500  # Fallback for unauthenticated users
 
+
 # route to handle view submission downloads
 
-@app.route('/download_submission/<path:file_path>')
-@login_required
-def download_submission(file_path):
-    if current_user.role != 'Teacher':
-        return redirect(url_for('teacher_dashboard'))
-    
-    # Ensure the file_path is safe and within the allowed directory
-    return send_from_directory(app.config['UPLOAD_FOLDER'], file_path, as_attachment=True)
+@app.errorhandler(500)
+def internal_server_error(error):
+    if current_user.is_authenticated:
+        if current_user.role == 'Admin':
+            return render_template('admin_error.html'), 500
+        elif current_user.role == 'Teacher':
+            return render_template('teacher_error.html'), 500
+        elif current_user.role == 'Student':
+            return render_template('student_error.html'), 500
+    else:
+        return render_template('generic_error.html'), 500  # Fallback for unauthenticated users
 
 """
 The student Module is a separate module that contains routes and views for the student dashboard, courses, submissions, and profile.
@@ -863,14 +1028,22 @@ def student_dashboard():
         return redirect(url_for('home'))
     
     # Fetch quick stats for the student
-    cur = mysql.connection.cursor()
+    cur = connection.cursor()
 
     # Get total enrolled courses
     cur.execute("SELECT COUNT(*) FROM enrollments WHERE student_id = %s", (current_user.id,))
     total_courses = cur.fetchone()[0]
 
     # Get pending submissions (assignments not yet submitted)
-    cur.execute("SELECT COUNT(*) FROM assignments WHERE course_id IN (SELECT course_id FROM enrollments WHERE student_id = %s) AND assignment_id NOT IN (SELECT assignment_id FROM submissions WHERE student_id = %s)", (current_user.id, current_user.id))
+    cur.execute("""
+        SELECT COUNT(*)
+        FROM assignments a
+        JOIN enrollments e ON a.course_id = e.course_id
+        WHERE e.student_id = %s
+        AND a.assignment_id NOT IN (
+            SELECT s.assignment_id FROM submissions s WHERE s.student_id = %s
+        )
+    """, (current_user.id, current_user.id))
     pending_submissions = cur.fetchone()[0]
 
     # Get recent grades (limit to 5 latest graded submissions)
@@ -888,7 +1061,7 @@ def student_dashboard():
 
     return render_template('student_dashboard.html', total_courses=total_courses, pending_submissions=pending_submissions, recent_grades=recent_grades)
 
-# This page lists all the courses the student is enrolled in.
+# List all courses the student is enrolled in
 @app.route('/student_courses')
 @login_required
 def student_courses():
@@ -896,7 +1069,7 @@ def student_courses():
         return redirect(url_for('home'))
     
     # Fetch enrolled courses
-    cur = mysql.connection.cursor()
+    cur = connection.cursor()
     cur.execute("""
         SELECT c.course_id, c.title, c.description
         FROM courses c
@@ -908,15 +1081,16 @@ def student_courses():
 
     return render_template('student_courses.html', courses=courses)
 
-# This page allows students to view their submissions and grades.
+# View submissions and grades for a student
 @app.route('/student_submissions')
 @login_required
 def student_submissions():
     if current_user.role != 'Student':
         return redirect(url_for('home'))
     
-    # Fetch submissions for the student
-    cur = mysql.connection.cursor()
+    cur = connection.cursor()
+
+    # Fetch submissions and grades for the student
     cur.execute("""
         SELECT s.submission_id, c.title, s.submission_date, s.grade, s.feedback
         FROM submissions s
@@ -925,7 +1099,7 @@ def student_submissions():
     """, (current_user.id,))
     submissions = cur.fetchall()
 
-    # Fetch enrolled courses
+    # Fetch enrolled courses and assignments for those courses
     cur.execute("""
         SELECT c.course_id, c.title
         FROM courses c
@@ -934,11 +1108,13 @@ def student_submissions():
     """, (current_user.id,))
     enrolled_courses = cur.fetchall()
 
-    # Fetch assignments for the enrolled courses
     cur.execute("""
-        SELECT a.assignment_id, a.title
+        SELECT a.assignment_id, a.title, c.title AS course_title
         FROM assignments a
-        WHERE a.course_id IN (SELECT course_id FROM enrollments WHERE student_id = %s)
+        JOIN courses c ON a.course_id = c.course_id
+        WHERE a.course_id IN (
+            SELECT e.course_id FROM enrollments e WHERE e.student_id = %s
+        )
     """, (current_user.id,))
     assignments = cur.fetchall()
 
@@ -946,40 +1122,44 @@ def student_submissions():
 
     return render_template('student_submissions.html', submissions=submissions, enrolled_courses=enrolled_courses, assignments=assignments)
 
+
 # This page allows students to update their profile information.
+import uuid
+from werkzeug.utils import secure_filename
+
+# Student profile update
 @app.route('/student_profile', methods=['GET', 'POST'])
 @login_required
 def student_profile():
     if current_user.role != 'Student':
         return redirect(url_for('home'))
-    
+
     if request.method == 'POST':
         username = request.form['username']
         email = request.form['email']
 
-        # Update the student's profile in the database
-        cur = mysql.connection.cursor()
-        cur.execute("UPDATE users SET username = %s, email = %s WHERE user_id = %s",
-                    (username, email, current_user.id))
-        mysql.connection.commit()
-        cur.close()
+        # Validate the inputs
+        if not username or not email:
+            flash('Username and Email are required.', 'error')
+            return redirect(url_for('student_profile'))
 
-        flash('Profile updated successfully!', 'success')
+        try:
+            # Update the student's profile in the database
+            cur = connection.cursor()
+            cur.execute("UPDATE users SET username = %s, email = %s WHERE user_id = %s",
+                        (username, email, current_user.id))
+            connection.commit()
+            cur.close()
+
+            flash('Profile updated successfully!', 'success')
+        except Exception as e:
+            flash(f'Error updating profile: {str(e)}', 'error')
+
         return redirect(url_for('student_profile'))
 
     return render_template('student_profile.html')
 
-# submit assignments
-
-# Configure upload folder
-UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
-ALLOWED_EXTENSIONS = {'pdf', 'doc', 'docx', 'txt'}
-
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-
-# Ensure the upload folder exists
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
+# Submit assignment
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
@@ -994,25 +1174,32 @@ def submit_assignment():
     file = request.files['file']
 
     if file and allowed_file(file.filename):
-        # Save the file
-        filename = f"{current_user.id}_{assignment_id}_{file.filename}"
+        # Secure the filename
+        original_filename = secure_filename(file.filename)
+        filename = f"{current_user.id}_{assignment_id}_{uuid.uuid4().hex}_{original_filename}"
         file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(file_path)
 
-        # Insert submission into the database
-        cur = mysql.connection.cursor()
-        cur.execute("""
-            INSERT INTO submissions (student_id, course_id, assignment_id, file_path)
-            VALUES (%s, %s, %s, %s)
-        """, (current_user.id, course_id, assignment_id, file_path))
-        mysql.connection.commit()
-        cur.close()
+        try:
+            # Save the file
+            file.save(file_path)
 
-        flash('Assignment submitted successfully!', 'success')
+            # Insert submission into the database
+            cur = connection.cursor()
+            cur.execute("""
+                INSERT INTO submissions (student_id, course_id, assignment_id, file_path)
+                VALUES (%s, %s, %s, %s)
+            """, (current_user.id, course_id, assignment_id, file_path))
+            connection.commit()
+            cur.close()
+
+            flash('Assignment submitted successfully!', 'success')
+        except Exception as e:
+            flash(f'Error submitting assignment: {str(e)}', 'error')
     else:
         flash('Invalid file type. Allowed types: pdf, doc, docx, txt.', 'error')
 
     return redirect(url_for('student_submissions'))
+
 
 if __name__ == '__main__':
     app.run(debug=True)
